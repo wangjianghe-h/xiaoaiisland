@@ -454,6 +454,7 @@ final class IslandContentBuilder {
                 extras.remove("miui.effect.src");
             }
             injectHighlightColorToFocusParam(extras, textHighlightColorHex);
+            injectRearParamForSubscreenCenter(extras);
             extras.putString(EXTRA_OWNER_KEY, EXTRA_OWNER_VALUE);
             return extras;
         } catch (Throwable ignored) {
@@ -480,6 +481,25 @@ final class IslandContentBuilder {
             root.put("param_v2", pv2);
             extras.putString("miui.focus.param", root.toString());
         } catch (Throwable ignore) {
+        }
+    }
+
+    private static void injectRearParamForSubscreenCenter(Bundle extras) {
+        if (extras == null) return;
+        try {
+            if (!extras.getString("miui.rear.param", "").isEmpty()) return;
+            JSONObject v1 = new JSONObject();
+            v1.put("business", "course_schedule");
+            v1.put("index", 0);
+            v1.put("priority", 500);
+            v1.put("disable_popup", false);
+            v1.put("show_time_tip", true);
+            v1.put("swipe_out_screen_listener", false);
+            v1.put("enableFloat", true);
+            JSONObject root = new JSONObject();
+            root.put("rear_param_v1", v1);
+            extras.putString("miui.rear.param", root.toString());
+        } catch (Throwable ignored) {
         }
     }
 

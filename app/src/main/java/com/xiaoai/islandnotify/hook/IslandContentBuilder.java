@@ -454,7 +454,7 @@ final class IslandContentBuilder {
                 extras.remove("miui.effect.src");
             }
             injectHighlightColorToFocusParam(extras, textHighlightColorHex);
-            injectRearParamForSubscreenCenter(extras);
+            injectRearParamForSubscreenCenter(extras, info, state, now);
             extras.putString(EXTRA_OWNER_KEY, EXTRA_OWNER_VALUE);
             return extras;
         } catch (Throwable ignored) {
@@ -484,10 +484,25 @@ final class IslandContentBuilder {
         }
     }
 
-    private static void injectRearParamForSubscreenCenter(Bundle extras) {
+    /**
+     * 背屏智能助手只会把 miui.rear.param 原样交给 MAML 模板（miui.focus.param 会被过滤掉），
+     * 所以课程的显示字段必须一并塞进 rear_param_v1，模板从那里取。
+     */
+    private static void injectRearParamForSubscreenCenter(
+            Bundle extras, CourseSnapshot info, int state, long now) {
         if (extras == null) return;
         try {
             if (!extras.getString("miui.rear.param", "").isEmpty()) return;
+            String timeRange = info.startTime
+                    + (info.endTime.isEmpty() ? "" : "-" + info.endTime);
+            String status;
+            if (state == STATE_FINISHED) {
+                status = "已下课";
+            } else if (state == STATE_ELAPSED) {
+                status = "上课中";
+            } else {
+                status = "即将开始";
+            }
             JSONObject v1 = new JSONObject();
             v1.put("business", "course_schedule");
             v1.put("index", 0);
@@ -496,6 +511,14 @@ final class IslandContentBuilder {
             v1.put("show_time_tip", true);
             v1.put("swipe_out_screen_listener", false);
             v1.put("enableFloat", true);
+            // 供背屏模板读取的显示字段（模板里是 rear_param_v1 下的同名 key）
+            v1.put("title", info.courseName);
+            v1.put("content", timeRange);
+            v1.put("hint", info.classroom);
+            v1.put("status", status);
+            v1.put("section", info.sectionRange);
+            v1.put("teacher", info.teacher);
+            v1.put("updated", now);
             JSONObject root = new JSONObject();
             root.put("rear_param_v1", v1);
             extras.putString("miui.rear.param", root.toString());

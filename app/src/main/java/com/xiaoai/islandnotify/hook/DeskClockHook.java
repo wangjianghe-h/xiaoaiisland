@@ -36,6 +36,11 @@ public class DeskClockHook {
     static final String ACTION_SCHEDULE_CLOCK_ALARMS =
             "com.xiaoai.islandnotify.ACTION_SCHEDULE_CLOCK_ALARMS";
 
+    /** DeskClockHook 就绪后反向通知 MainHook 重发调度（解决冷启动丢广播） */
+    static final String ACTION_CLOCK_READY =
+            "com.xiaoai.islandnotify.ACTION_CLOCK_READY";
+    private static final String MAIN_PKG = "com.miui.voiceassist";
+
     /** 存储我方已创建闹钟 ID 列表（逗号分隔 long）的 SP 文件名 */
     private static final String SP_WAKEUP     = "island_wakeup";
     /** 存储创建的闹钟 ID 列表的 SP 键 */
@@ -56,6 +61,16 @@ public class DeskClockHook {
                         Context ctx = (Application) param.thisObject;
                         registerScheduleReceiver(ctx, classLoader);
                         XposedBridge.log(TAG + ": 叫醒闹钟接收器已注册");
+                        // 反向握手：本进程（重新）启动后主动索要一次调度，
+                        // 避免 MainHook 广播早于接收器注册而丢失
+                        try {
+                            Intent ready = new Intent(ACTION_CLOCK_READY);
+                            ready.setPackage(MAIN_PKG);
+                            ready.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+                            ctx.sendBroadcast(ready);
+                            XposedBridge.log(TAG + ": 已通知 voiceassist 重发叫醒调度");
+                        } catch (Throwable ignored) {
+                        }
                     }
                 });
     }

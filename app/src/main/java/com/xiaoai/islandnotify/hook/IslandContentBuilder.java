@@ -519,6 +519,43 @@ final class IslandContentBuilder {
             v1.put("section", info.sectionRange);
             v1.put("teacher", info.teacher);
             v1.put("updated", now);
+            // 倒计时前缀 + 目标时刻（模板用 #time_sys 与之相减，实现每秒刷新）
+            // 模板侧只有 jsonGetString，长整型直接放进去会变空，所以统一转成字符串
+            if (state == STATE_COUNTDOWN) {
+                v1.put("countdown_label", "距上课");
+                v1.put("timer_when", String.valueOf(computeClassStartMs(info.startTime)));
+            } else if (state == STATE_ELAPSED) {
+                v1.put("countdown_label", "距下课");
+                v1.put("timer_when", String.valueOf(computeClassStartMs(info.endTime)));
+            } else {
+                v1.put("countdown_label", "");
+                v1.put("timer_when", "0");
+            }
+            // 把岛上的按钮原样搬到背屏：actionIntent 是 Intent URI，actionTitle 是按钮文案
+            try {
+                JSONObject focusRoot = new JSONObject(extras.getString("miui.focus.param", ""));
+                JSONObject pv2 = focusRoot.optJSONObject("param_v2");
+                JSONObject hintInfo = pv2 != null ? pv2.optJSONObject("hintInfo") : null;
+                JSONObject actionInfo = hintInfo != null
+                        ? hintInfo.optJSONObject("actionInfo") : null;
+                if (actionInfo != null) {
+                    String actionUri = actionInfo.optString("actionIntent", "");
+                    v1.put("action", actionUri);
+                    v1.put("action_title", actionInfo.optString("actionTitle", ""));
+                    v1.put("action_type", actionInfo.optInt("actionIntentType", 0));
+                    // 背屏模板不能执行 Intent URI，只认广播；这里给出可映射的动作名
+                    String kind = "";
+                    if (actionUri.contains("MANUAL_UNMUTE")) {
+                        kind = "UNMUTE";
+                    } else if (actionUri.contains("MANUAL_MUTE")) {
+                        kind = "MUTE";
+                    } else if (actionUri.contains("MANUAL_SKIP_CLASS")) {
+                        kind = "SKIP";
+                    }
+                    v1.put("action_kind", kind);
+                }
+            } catch (Throwable ignored) {
+            }
             JSONObject root = new JSONObject();
             root.put("rear_param_v1", v1);
             extras.putString("miui.rear.param", root.toString());

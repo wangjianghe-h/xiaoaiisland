@@ -51,6 +51,8 @@ public class MainHook {
     private static final String ACTION_MANUAL_SKIP_CLASS = "com.xiaoai.islandnotify.MANUAL_SKIP_CLASS";
     /** 每日 00:01 跨日重调广播 Action（链式保证次日课程 alarm 不丢失） */
     private static final String ACTION_RESCHEDULE_DAILY = "com.xiaoai.islandnotify.ACTION_RESCHEDULE_DAILY";
+    /** deskclock 进程就绪回调：收到后立即重发叫醒调度 */
+    private static final String ACTION_CLOCK_READY = "com.xiaoai.islandnotify.ACTION_CLOCK_READY";
     /** WakeUp 数据源同步到超级小爱进程 */
     private static final String ACTION_WAKEUP_COURSE_SYNC = WakeupHook.ACTION_WAKEUP_COURSE_SYNC;
     /** 拾光数据源同步到超级小爱进程 */
@@ -356,6 +358,7 @@ public class MainHook {
                 filter.addAction(ACTION_MANUAL_UNMUTE);
                 filter.addAction(ACTION_MANUAL_SKIP_CLASS);
                 filter.addAction(ACTION_RESCHEDULE_DAILY);
+                filter.addAction(ACTION_CLOCK_READY);
                 filter.addAction(ACTION_NOTIF_CANCEL);
                 filter.addAction(ACTION_WAKEUP_COURSE_SYNC);
                 filter.addAction(ACTION_SHIGUANG_COURSE_SYNC);
@@ -720,6 +723,11 @@ public class MainHook {
      */
     private boolean dispatchSimpleAction(Context context, Intent intent, String action) {
         if (action == null) return true;
+        if (ACTION_CLOCK_READY.equals(action)) {
+            XposedBridge.log(TAG + ": deskclock 已就绪，重发叫醒调度");
+            scheduleTodayWakeupAlarms(context);
+            return true;
+        }
         if (ACTION_DO_MUTE.equals(action)) {
             int automationAlarmId = intent.getIntExtra("automation_alarm_id", -1);
             if (isAutomationSkippedToday(context, automationAlarmId)) {
@@ -1787,7 +1795,10 @@ public class MainHook {
             // 1. Tickle：通过查询 ContentProvider 迫使 deskclock 进程启动
             tickleDeskClock(ctx);
 
-            // 2. 延时 1s 发送：确保 deskclock 进程完成初始化并进入 Looper 循环
+            // 2. 多次重试投递：deskclock 冷启动可能超过 1s，单次广播容易丢失。
+            //    DeskClockHook 每次收到都会先清旧闹钟再重建，重复投递是幂等的。
+            final long[] retryDelays = {1000L, 4000L, 12000L, 30000L};
+            for (final long retryDelay : retryDelays) {
             getRescheduleHandler().postDelayed(() -> {
                 try {
                     SharedPreferences prefs = getConfigPrefs(ctx);
@@ -1816,11 +1827,12 @@ public class MainHook {
                         schedIntent.putExtra("afternoon_rules_json", readConfigString(prefs, KEY_WAKEUP_AFTERNOON_RULES_JSON, DEFAULT_WAKEUP_AFTERNOON_RULES_JSON));
                     }
                     ctx.sendBroadcast(schedIntent);
-                    XposedBridge.log(TAG + ": 叫醒配置已转发给 deskclock (已延迟 1s)");
+                    XposedBridge.log(TAG + ": 叫醒配置已转发给 deskclock (delay=" + retryDelay + "ms)");
                 } catch (Throwable e) {
                     XposedBridge.log(TAG + ": postDelayed scheduleWakeup 失败 → " + e.getMessage());
                 }
-            }, 1000);
+            }, retryDelay);
+            }
 
         } catch (Throwable e) {
             XposedBridge.log(TAG + ": scheduleTodayWakeupAlarms 失败 → " + e.getMessage());

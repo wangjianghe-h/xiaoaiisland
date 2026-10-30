@@ -1,0 +1,30 @@
+name: prep-upstream-pr
+
+on:
+  push:
+    paths:
+      - .github/workflows/prep-upstream-pr.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build clean branch on top of upstream main
+        run: |
+          set -eux
+          git fetch origin wakeup-rule-fallback
+          git fetch https://github.com/Mercury000/xiaoaiisland.git main:refs/remotes/upstream/main
+          git checkout -B clean-wakeup refs/remotes/upstream/main
+          git -c user.name="wangjianghe-h" -c user.email="wangjianghe-h@users.noreply.github.com" \
+              cherry-pick -x 908979579c6845217de32ce5c76a1a4d8a34e025
+          git --no-pager log --oneline -3
+          git --no-pager show --stat --oneline HEAD
+          git push origin clean-wakeup --force
